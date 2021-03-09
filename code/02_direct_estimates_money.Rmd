@@ -1,0 +1,106 @@
+---
+title: "Direct Estimates Money Lost"
+---
+
+Summary: Direct estimates of money lost due to cybercrime 
+
+Library Packages 
+
+```{r}
+library(tidyverse)
+library(survey)
+library(srvyr)
+```
+
+## Money 
+
+```{r}
+survey <- read_csv("../data/full_survey.csv", guess_max = 15000)
+
+## recode money 
+survey <- survey %>% 
+  mutate(banking_money = case_when(
+    banking_lostmoney == 1 ~ banking_money,
+    TRUE ~ NA_real_), 
+    nondelivery_money = case_when(
+      nondelivery == 1 ~ nondelivery_money,
+      TRUE ~ NA_real_),
+    nonpayment_money = case_when(
+      nonpayment == 1 ~ nonpayment_money,
+      TRUE ~ NA_real_),
+    overpayment_money = case_when(
+      overpayment == 1 ~ overpayment_money,
+      TRUE ~ NA_real_),
+    extortion_money = case_when(
+      extortion == 1 ~ extortion_money,
+      TRUE ~ NA_real_),
+    advanced_fee_money = case_when(
+      advanced_fee == 1 ~ advanced_fee_money,
+      TRUE ~ NA_real_)) 
+
+## create survey object
+dsurvey_new <- survey %>% 
+  as_survey_design(weight = weight2)
+
+## Calculate mean money lost using mean argument 
+mean_money_lost <- dsurvey_new %>% 
+  srvyr::summarize(banking.lostmoney = survey_mean(banking_money, vartype = c("ci", "se", "n"), na.rm = T),
+            nondelivery = survey_mean(nondelivery_money, vartype = c("ci", "se"), na.rm = T),
+            nonpayment = survey_mean(nonpayment_money, vartype = c("ci", "se"), na.rm = T),
+            overpayment = survey_mean(overpayment_money, vartype = c("ci", "se"), na.rm = T),
+            extortion = survey_mean(extortion_money, vartype = c("ci", "se"), na.rm = T),
+            advanced.fee = survey_mean(advanced_fee_money, vartype = c("ci", "se"), na.rm = T)
+  ) %>% 
+  mutate(id = "id") %>% 
+  pivot_longer(- id) %>% 
+  separate(name, c("scam", "type"), sep = "_", fill = "warn") %>% 
+  pivot_wider(names_from = c(type), values_from = value, names_sep = "_") %>% 
+  select(scam,
+         mean = `NA`,
+         se = se,
+         low,
+         upp) %>% 
+  arrange(desc(mean)) %>% 
+  mutate(scam = case_when(
+    scam == "banking" ~ "Banking / Credit Card",
+    scam == "nondelivery" ~ "Non-Delivery",
+    scam == "banking.lostmoney" ~ "Banking / Credit Card (Lost Money)",
+    scam == "advanced.fee" ~ "Advanced Fee",
+    scam == "nonpayment" ~ "Non-Payment",
+    scam == "extortion" ~ "Extortion",
+    scam == "overpayment" ~ "Overpayment"
+  ))
+
+## Survey
+median_money_lost <- dsurvey_new %>% 
+  summarize(banking.lostmoney = survey_quantile(banking_money, c(0.1, .25, .5, .75, .9), na.rm = T),
+            nondelivery = survey_quantile(nondelivery_money, c(0.1, .25, .5, .75, .9),  na.rm = T),
+            nonpayment = survey_quantile(nonpayment_money, c(0.1, .25, .5, .75, .9), na.rm = T),
+            extortion = survey_quantile(extortion_money, c(0.1, .25, .5, .75, .9),  na.rm = T),
+            overpayment = survey_quantile(overpayment_money, c(0.1, .25, .5, .75, .9), na.rm = T), 
+            advanced.fee = survey_quantile(advanced_fee_money, c(0.1, .25, .5, .75, .9),na.rm = T)) %>% 
+  mutate(id = "id") %>% 
+  pivot_longer(- id) %>% 
+  filter(!str_detect(name, "se")) %>% 
+  separate(name, c("scam", "type"), sep = "_", fill = "warn") %>% 
+  pivot_wider(names_from = c(type), values_from = value, names_sep = "_") %>% 
+  mutate(scam = case_when(
+    scam == "banking" ~ "Banking / Credit Card",
+    scam == "nondelivery" ~ "Non-Delivery",
+    scam == "banking.lostmoney" ~ "Banking / Credit Card (Lost Money)",
+    scam == "advanced.fee" ~ "Advanced Fee",
+    scam == "nonpayment" ~ "Non-Payment",
+    scam == "extortion" ~ "Extortion",
+    scam == "overpayment" ~ "Overpayment"
+  )) %>% 
+  mutate(iqr = q75-q25)
+
+## weighted money lost
+money_lost <- mean_money_lost %>% 
+  left_join(median_money_lost) %>% 
+  select(scam = scam, Mean = mean, SE = se, q10, median = q50, q90) 
+
+## save results 
+write_csv(money_lost, file = "../data/results/money_lost.csv")
+```
+

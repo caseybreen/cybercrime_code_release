@@ -1,0 +1,103 @@
+---
+title: "Direct Estimates"
+---
+
+Summary: Compute direct estimates of standard errors using the survey_mean function with beta option. 
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(srvyr)
+library(googlesheets4)
+```
+
+## Full Sample 
+
+```{r}
+## read in general survey
+gensample <- read_csv("../data/full_survey.csv", guess_max = 15000) %>% 
+  filter(p_over == 1)
+
+## create survey object 
+dsurvey <- gensample %>% 
+  as_survey_design(weight = weight)
+
+## calculate survey means using proportion argument 
+direct_estimates <- dsurvey %>% 
+  summarize(banking.lostmoney = survey_mean(banking_lostmoney, proportion = T, prop_method = "beta", vartype = c("ci", "se")),
+            banking = survey_mean(banking, proportion = T, prop_method = "beta", vartype = c("ci", "se")),
+            nondelivery = survey_mean(nondelivery, proportion = T, prop_method = "beta", vartype = c("ci", "se")),
+            nonpayment = survey_mean(nonpayment, proportion = T, prop_method = "beta", vartype = c("ci", "se")),
+            overpayment = survey_mean(overpayment, proportion = T, prop_method = "beta", vartype = c("ci", "se")),
+            extortion = survey_mean(extortion, proportion = T, prop_method = "beta", vartype = c("ci", "se")),
+            advanced.fee = survey_mean(advanced_fee, proportion = T, prop_method = "beta", vartype = c("ci", "se"))) %>% 
+  mutate(id = "id") %>% 
+  pivot_longer(- id) %>% 
+  separate(name, c("scam", "type"), sep = "_", fill = "warn") %>% 
+  pivot_wider(names_from = c(type), values_from = value, names_sep = "_") %>% 
+  select(scam,
+         estimate = `NA`,
+         se = se,
+         low,
+         upp) %>% 
+  arrange(desc(estimate)) %>% 
+  mutate(scam = case_when(
+    scam == "banking" ~ "Banking / Credit Card",
+    scam == "nondelivery" ~ "Non-Delivery",
+    scam == "banking.lostmoney" ~ "Banking / Credit Card (Lost Money)",
+    scam == "advanced.fee" ~ "Advanced Fee",
+    scam == "nonpayment" ~ "Nonpayment",
+    scam == "extortion" ~ "Extortion",
+    scam == "overpayment" ~ "Overpayment"
+  ))
+
+## oversample
+oversample <- read_csv("../data/full_survey.csv", guess_max = 15000) %>% 
+  filter(p_over == 2)
+
+## create survey object 
+oversample_survey <- oversample %>% 
+  as_survey_design(weight = weight2)
+
+## calculate survey means using proportion argument 
+oversample_summary_stats <- oversample_survey %>% 
+  summarize(
+            nonpayment = survey_mean(nonpayment, proportion = T, prop_method = "beta", vartype = c("ci", "se")),
+            overpayment = survey_mean(overpayment, proportion = T, prop_method = "beta", vartype = c("ci", "se")),
+            extortion = survey_mean(extortion, proportion = T, prop_method = "beta", vartype = c("ci", "se")),
+            advanced.fee = survey_mean(advanced_fee, proportion = T, prop_method = "beta", vartype = c("ci", "se"))
+  ) %>% 
+  mutate(id = "id") %>% 
+  pivot_longer(- id) %>% 
+  separate(name, c("scam", "type"), sep = "_", fill = "warn") %>% 
+  pivot_wider(names_from = c(type), values_from = value, names_sep = "_") %>% 
+  select(scam,
+         mean = `NA`,
+         se = se,
+         low,
+         upp) %>% 
+  arrange(desc(mean)) %>% 
+  mutate()
+
+## final direct results for the paper  
+## Oversample for advanced fee, extortion, nonpayment, and overpayment 
+direct_estimates <- oversample_summary_stats %>% 
+  rename(estimate = mean) %>% 
+  bind_rows(direct_estimates %>% 
+              filter(scam %in% c("Banking / Credit Card", "Non-Delivery", "Banking / Credit Card (Lost Money)"))) %>% 
+  mutate(scam = case_when(
+    scam == "advanced.fee" ~ "Advanced Fee",
+    scam == "nonpayment" ~ "Non-Payment",
+    scam == "extortion" ~ "Extortion",
+    scam == "overpayment" ~ "Overpayment", 
+    TRUE ~ scam
+  )) %>% 
+  mutate(estimate_annualized = 1 - (1-estimate)^(1/2),
+         low_annualized = 1 - (1-low)^(1/2),
+         upper_annualized = 1 - (1-upp)^(1/2),
+         method = "Direct")
+
+write_csv(direct_estimates, file = "../data/results/direct_estimates.csv")
+```
+
+

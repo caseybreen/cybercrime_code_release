@@ -1,0 +1,336 @@
+---
+title: "Generate Figures"
+---
+
+```{r initialize}
+## library packages 
+library(tidyverse)
+library(networkreporting)
+library(janitor)
+library(gt)
+
+## load survey  
+survey <- read_csv("../data/full_survey.csv", guess_max = 15000)
+
+## load estimates (money lost, direct, generalized network scale-up)
+direct_estimates <- read_csv("../data/results/direct_estimates.csv") 
+gnsum_estimates <- read_csv("../data/results/gnsum_estimates.csv") 
+loss_estimates <- read_csv("../data/results/money_lost.csv") 
+
+## load data 
+estimates_all_sources <- read_csv("../data/misc/cybercrime_estimates_all_sources.csv")
+
+## load adjustment factors estimates 
+adjustments_pooled <- read_csv("../data/results/nsum_pooled_adjustments.csv")
+adjustments_individual <- read_csv("../data/results/nsum_individual_adjustments.csv")
+```
+
+## Table 1 
+```{r table 1}
+## create table 1 
+table1 <- direct_estimates %>% 
+  select(scam, direct_estimate = estimate_annualized) %>% 
+  mutate(direct_estimate = direct_estimate*100) %>% 
+  left_join(loss_estimates %>% 
+  select(scam, median, q10, q90)) %>% 
+  arrange(desc(direct_estimate))  %>% 
+  mutate(scam = forcats::fct_relevel(scam, "Banking / Credit Card", "Banking / Credit Card (Lost Money)", "Non-Delivery", "Advanced Fee","Non-Payment",  "Extortion", "Overpayment")) %>% 
+  arrange(scam) %>% 
+  mutate(across(where(is.numeric), round, 3))
+
+table1 <- gt(data = table1) %>% 
+  cols_label(
+    "scam" = "Cybercrime",
+    "direct_estimate" = "Direct Estimate (%)",
+    "median" = "Median",
+    "q10" = "Q10",
+    "q90" = "Q90",
+  ) %>% 
+  cols_align("left") %>% 
+  tab_spanner(
+    label = "Prevalence",
+    columns = vars(
+      direct_estimate)) %>% 
+  tab_spanner(
+    label = "Money Lost (Dollars)",
+    columns = vars(
+      median, q10, q90))
+
+table1 %>%
+  gtsave("table_1.tex", path = "../tables/")
+
+```
+
+## Table 2
+
+Annualized cybercrime prevalence from our direct estimation and network scale-up survey. 
+
+```{r table 1}
+table2 <- direct_estimates %>% 
+  select(cybercrime = scam, direct_estimate = estimate_annualized) %>% 
+  left_join(gnsum_estimates %>% 
+  select(cybercrime = scam, network_scaleup = estimate_annualized)) %>% 
+  select(cybercrime, network_scaleup, direct_estimate) %>% 
+  mutate(network_scaleup = round(network_scaleup*100, digits = 3), 
+         direct_estimate = round(direct_estimate *100, digits = 3)) %>% 
+  mutate(cybercrime = forcats::fct_relevel(cybercrime, "Banking / Credit Card", "Banking / Credit Card (Lost Money)", "Non-Delivery", "Advanced Fee","Non-Payment",  "Extortion", "Overpayment")) %>% 
+  arrange(cybercrime)
+
+table2 <- gt(data = table2) %>% 
+  cols_label(
+    "cybercrime" = "Cybercrime",
+    "network_scaleup" = "Network Scale-up (%)",
+    "direct_estimate" = "Direct (%)",
+  ) %>% 
+  opt_row_striping(row_striping = T) %>% 
+  cols_align("left")
+
+table2 %>%
+  gtsave("table_2.tex", path = "../tables/")
+```
+
+## Table S3 
+
+Sample descriptive statistics (weighted). Sample collected from NORC's Amerispeak Panel. 
+
+
+```{r}
+## recode data  
+survey_recode <- survey %>% 
+  mutate(
+    gender = case_when(
+      gender == 1	~ "Male",
+      gender == 2	~ "Female"),
+    age = case_when(
+      age4 == 1 ~	"18-29",
+      age4 ==  2	~ "30-44",
+      age4 ==  3	~ "45-59",
+      age4 ==  4 ~	"60+"),
+    race = case_when(
+      racethnicity == 1	~ "White, non-Hispanic",
+      racethnicity == 2	~ "Black, non-Hispanic",
+      racethnicity == 3 ~ "Other, non-Hispanic",
+      racethnicity == 4	~ "Hispanic",
+      racethnicity == 5	~ "2+, non-Hispanic",
+      racethnicity == 6	~ "Asian, non-Hispanic"), 
+    income = case_when( 
+      income %in% 1:6	~   "<$29,999",
+      income %in% 7:11	~ "$30,000 to $74,999",
+      income %in% 12:14	~ "$75,000 to $124,999",
+      income %in% 15:18	~ ">$125,000+"),
+    metro = case_when(
+      metro == 0 ~ "Non-Metro Area",
+      metro == 1 ~ "Metro Area"),
+    marital = as.factor(case_when(
+      marital == 1 ~	"Married",
+      marital == 2 ~	"Widowed",
+      marital == 3 ~	"Divorced",
+      marital == 4 ~	"Separated",
+      marital == 5 ~	"Never married",
+      marital == 6 ~	"Living with partner")), 
+    educ = case_when(
+      educ == 1	~ "<HS Equivalent",
+      educ == 2	~ "HS Equivalent",
+      educ == 3	~ "Some college",
+      educ == 4	~ "Bachelors",
+      educ == 5	~ "Advanced degree")) 
+
+gen <- survey_recode %>% 
+  filter(p_over == 1) %>% 
+  select(id, Gender = gender, Age = age, Education = educ, Race = race, Income = income, Metro = metro, Marital = marital) %>%
+  pivot_longer(-id ) %>% 
+  group_by(name, value) %>%
+  tally() %>%            
+  mutate(prop = round(100*prop.table(n), 1)) %>% 
+  rename(n_gen = n, prop_gen = prop)
+
+oversample <- survey_recode %>% 
+  filter(p_over == 2) %>% 
+  select(id, Gender = gender, Age = age, Education = educ, Race = race, Income = income, Metro = metro, Marital = marital) %>%
+  pivot_longer(-id ) %>% 
+  group_by(name, value) %>%
+  tally() %>%           
+  mutate(prop = round(100*prop.table(n), 1))  %>% 
+  rename(n_oversample = n, prop_oversample = prop)
+
+total <- survey_recode %>% 
+  select(id, Gender = gender, Age = age, Education = educ, Race = race, Income = income, Metro = metro, Marital = marital) %>%
+  pivot_longer(-id ) %>% 
+  group_by(name, value) %>%
+  tally() %>% 
+  mutate(prop = round(100*prop.table(n), 1))
+
+unweighted_data <- gen %>% 
+  inner_join(oversample, by = c("name", "value")) %>% 
+  inner_join(total, by = c("name", "value")) %>% 
+ # mutate(name = as.factor(name), value = as.factor(name)) %>% 
+  mutate(name = factor(name, levels = c("Gender", "Age", "Education", "Race", "Income", "Metro", "Marital"))) %>% 
+  mutate(value = factor(value, levels = c('Male', 'Female',
+                                      '18-29', '30-44', '45-59', '60+',
+                                      '<HS Equivalent', "HS Equivalent", "Some college", "Bachelors", "Advanced degree",
+                                      "White, non-Hispanic", "Black, non-Hispanic", "Other, non-Hispanic", "Hispanic", "2+, non-Hispanic", "Asian, non-Hispanic",
+                                      "<$29,999", "$30,000 to $74,999", "$75,000 to $124,999", ">$125,000+",
+                                      "Non-Metro Area", "Metro Area",
+                                      "Married", "Widowed", "Divorced", "Separated", "Never married", "Living with partner"))) %>% 
+  arrange(name, value) 
+
+## create table 
+table_s3 <- gt(data = unweighted_data) %>% 
+  tab_spanner(
+    label = "General Pop",
+    columns = vars(
+      n_gen, prop_gen)) %>% 
+  tab_spanner(
+    label = "Oversample",
+    columns = vars(
+      n_oversample, prop_oversample)) %>% 
+  tab_spanner(
+    label = "Total",
+    columns = vars(
+      n, prop)) %>% 
+  cols_label(
+    "n_gen" = "No.",
+    "prop_gen" = "%",
+    "n_oversample" = "No.",
+    "prop_oversample" = "%",
+    "n"  = "No.",
+    "prop" = "%",
+    value = ""
+  ) %>% 
+  row_group_order(
+      groups = c("Gender", "Age", "Education", "Race")
+    ) %>% 
+  tab_style(
+    style = list(
+      cell_text(weight = "bold")),
+    locations = cells_row_groups()
+  ) %>% 
+  opt_row_striping(row_striping = T) %>% 
+  cols_align("left")
+
+table_s3 %>%
+  gtsave("table_s3.tex", path = "../tables/")
+```
+
+## Table S3 
+
+Sample descriptive statistics (weighted). Sample collected from NORC's Amerispeak Panel. 
+
+```{r}
+gen_weighted <- survey_recode %>% 
+  filter(p_over == 1) %>% 
+  select(id, weight, Gender = gender, Age = age, Education = educ, Race = race, Income = income, Metro = metro, "Marital Status" = marital) %>%
+  pivot_longer(-c(id, weight)) %>% 
+  group_by(name, value) %>%
+  summarize(n = sum(weight)) %>%            
+  mutate(prop = round(100*prop.table(n), 1),
+         n = round(n, 0)) %>% 
+  rename(n_gen = n, prop_gen = prop)
+
+oversample_weighted <- survey_recode %>% 
+  filter(p_over == 2) %>% 
+  select(id, weight2, Gender = gender, Age = age, Education = educ, Race = race, Income = income, Metro = metro, "Marital Status" = marital) %>%
+  pivot_longer(-c(id, weight2)) %>% 
+  group_by(name, value) %>%
+  summarize(n = sum(weight2)) %>%            
+  mutate(prop = round(100*prop.table(n), 1),
+         n = round(n, 0))  %>% 
+  rename(n_oversample = n, prop_oversample = prop)
+
+total_weighed <- survey_recode %>% 
+  select(id, weight2, Gender = gender, Age = age, Education = educ, Race = race, Income = income, Metro = metro, "Marital Status" = marital) %>%
+  pivot_longer(-c(id, weight2)) %>% 
+  group_by(name, value) %>%
+  summarize(n = sum(weight2)) %>%            
+  mutate(prop = round(100*prop.table(n), 1),
+         n = round(n, 0))
+
+weighted_data <- gen_weighted %>% 
+  inner_join(oversample_weighted, by = c("name", "value")) %>% 
+  inner_join(total_weighed, by = c("name", "value")) %>% 
+ # mutate(name = as.factor(name), value = as.factor(name)) %>% 
+  mutate(name = factor(name, levels = c("Gender", "Age", "Education", "Race", "Income", "Metro", "Marital Status"))) %>% 
+  mutate(value = factor(value, levels = c('Male', 'Female',
+                                      '18-29', '30-44', '45-59', '60+',
+                                      '<HS Equivalent', "HS Equivalent", "Some college", "Bachelors", "Advanced degree",
+                                      "White, non-Hispanic", "Black, non-Hispanic", "Other, non-Hispanic", "Hispanic", "2+, non-Hispanic", "Asian, non-Hispanic",
+                                      "<$29,999", "$30,000 to $74,999", "$75,000 to $124,999", ">$125,000+",
+                                      "Non-Metro Area", "Metro Area",
+                                      "Married", "Widowed", "Divorced", "Separated", "Never married", "Living with partner"))) %>% 
+  arrange(name, value) 
+
+## create table 
+table_s4 <- gt(data = weighted_data) %>% 
+  tab_spanner(
+    label = "General Pop",
+    columns = vars(
+      n_gen, prop_gen)) %>% 
+  tab_spanner(
+    label = "Oversample",
+    columns = vars(
+      n_oversample, prop_oversample)) %>% 
+  tab_spanner(
+    label = "Total",
+    columns = vars(
+      n, prop)) %>% 
+  cols_label(
+    "n_gen" = "No.",
+    "prop_gen" = "%",
+    "n_oversample" = "No.",
+    "prop_oversample" = "%",
+    "n"  = "No.",
+    "prop" = "%",
+    value = ""
+  ) %>% 
+  row_group_order(
+      groups = c("Gender", "Age", "Education", "Race")
+    ) %>% 
+  tab_style(
+    style = list(
+      cell_text(weight = "bold")),
+    locations = cells_row_groups()
+  ) %>% 
+  opt_row_striping(row_striping = T) %>% 
+  cols_align("left")
+
+table_s4 %>%
+  gtsave("table_s4.tex", path = "../tables/")
+```
+
+## Table S3 
+
+```{r}
+table_s6 <- adjustments_individual %>% 
+  mutate(`Adjustment Factor` = (1/degree_ratio) * (1/true_positive_rate)) %>% 
+  mutate(scam = case_when(
+    scam == "banking" ~ "Banking / Credit Card",
+    scam == "nondelivery" ~ "Non-Delivery",
+    scam == "banking_lostmoney" ~ "Banking / Credit Card (Lost Money)",
+    scam == "advanced_fee" ~ "Advanced Fee",
+    scam == "nonpayment" ~ "Nonpayment",
+    scam == "extortion" ~ "Extortion",
+    scam == "overpayment" ~ "Overpayment"
+  )) %>% 
+  select(Cybercrime = scam, Prevalence = prevalence, `Degree Ratio` = degree_ratio, 
+         Visibility_ratio = true_positive_rate, `Adjustment Factor`) %>% 
+  mutate(across(where(is.numeric), round, 5)) %>% 
+  mutate(Cybercrime = forcats::fct_relevel(Cybercrime, "Banking / Credit Card", "Banking / Credit Card (Lost Money)", "Non-Delivery", "Advanced Fee","Non-Payment",  "Extortion", "Overpayment")) %>% 
+  arrange(Cybercrime) %>% 
+  gt()
+
+table_s6 %>%
+  gtsave("table_s6.tex", path = "../tables/")
+```
+
+
+```{r}
+table_s7 <- adjustments_pooled %>%
+  mutate(`Adjustment Factor` = (1/degree_ratio) * (1/true_positive_rate)) %>% 
+  select(Category = factor, `Degree Ratio` = degree_ratio, `Visibility Factor` = true_positive_rate, `Adjustment Factor`) %>% 
+  mutate(across(where(is.numeric), round, 5)) %>% 
+  gt()
+
+table_s7 %>%
+  gtsave("table_s7.tex", path = "../tables/")
+```
+

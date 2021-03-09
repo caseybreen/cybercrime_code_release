@@ -1,0 +1,230 @@
+---
+title: "Figures and Scripts"
+---
+
+Summary: This notebook contains code to replicate all figures and tables.
+
+
+```{r initialize}
+## library packages 
+library(tidyverse)
+library(networkreporting)
+library(socviz)
+library(cowplot)
+
+
+## load survey  
+survey <- read_csv("../data/full_survey.csv", guess_max = 15000)
+
+## load estimates (money lost, direct, generalized network scale-up)
+direct_estimates <- read_csv("../data/results/direct_estimates.csv") 
+gnsum_estimates <- read_csv("../data/results/gnsum_estimates.csv") 
+loss_estimates <- read_csv("../data/results/money_lost.csv") 
+
+## read in data 
+estimates_all_sources <- read_csv("../data/misc/cybercrime_estimates_all_sources.csv")
+```
+
+## Figure 1 
+
+Distribution of money lost per directly-reported cybercrime incident.
+
+```{r figure 1}
+## select money lost variables 
+money_lost <- survey %>% 
+  select(id, nondelivery_money, nonpayment_money, extortion_money, banking_money, advanced_fee_money, overpayment_money)
+
+money_lost <- pivot_longer(money_lost, cols = -id, names_to = c('incident', ".value"), 
+                           #1+ non digits followed by 1+ digits
+                           names_pattern = "(\\D+)_(\\D+)")
+
+## Histogram of money lost
+## remove the two cases greater than 5,000
+money_plot <- money_lost %>% 
+  mutate(money = case_when(
+    money > 1500 ~ 1500,
+    TRUE ~ money
+  )) %>% 
+  mutate(incident = case_when(
+    incident == "banking" ~ "Banking / Credit Card",
+    incident == "nondelivery" ~ "Non-Delivery",
+    incident == "banking.lostmoney" ~ "Credit Card / Banking (Lost Money)",
+    incident == "advanced_fee" ~ "Advanced Fee",
+    incident == "nonpayment" ~ "Non-Payment",
+    incident == "extortion" ~ "Extortion",
+    incident == "overpayment" ~ "Overpayment"
+  )) %>% 
+  filter(!is.na(money)) %>% 
+  ggplot(aes(x = money, y = ..density..)) +
+  stat_density() + 
+  theme_bw(base_size = 25) +
+  facet_wrap(~incident, nrow = 3) + 
+  labs(
+    x = "Money Lost",
+    Y = "Count"
+  ) + 
+  scale_x_continuous(breaks=c(0, 500, 1000, 1500),
+                   labels=c("0", "500", "1000", "1500+")) + 
+  theme(panel.spacing.x=unit(3, "lines"))
+
+## save plot 
+ggsave(plot = money_plot, "../figures/fig-money_lost.pdf", height = 10, width = 10)
+```
+
+## Figure 2 
+
+Estimates of cybercrime prevalence based both on our direct (blue circle) and network scale-up (red triangle) surveys with 95% confidence intervals. 
+
+```{r fig 2}
+## results 
+results <- bind_rows(direct_estimates, gnsum_estimates)
+
+## Figure 2 
+combined_comparison_plot <- results %>% 
+  ggplot(
+    mapping = aes(x = reorder(scam, -estimate_annualized),
+                  y = estimate_annualized, color = method, shape = method )) + 
+  geom_pointrange(position = position_dodge(width = .15), mapping = aes(ymin = low_annualized,
+                                                                       ymax = upper_annualized),
+                  stroke = 2, size = 1) + 
+  geom_hline(yintercept = 0, linetype = "dashed") + 
+  theme_bw(base_size = 22) + 
+  labs(x = "",
+       y = "Count") +
+  scale_y_continuous(label = scales::percent) + 
+  theme(legend.position = "bottom") + 
+  theme(legend.title =element_blank()) +
+  ggsci::scale_color_lancet() + 
+  theme(axis.text.x = element_text(angle = -30, vjust = 0.1, hjust=.09)) + 
+  theme(
+    legend.position = c(.999, .999),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6),
+    legend.background = element_rect(color = "black", size = .5, linetype = "solid")) +
+  theme(plot.margin=unit(c(1,2,1,.3),"cm"))
+ 
+ggsave(plot = combined_comparison_plot, filename = "../figures/fig-direct_nsum_comparison_combined.pdf", width = 10, height = 9)
+```
+
+## Figure 3 
+
+Comparison of cybercrime prevalence estimates generated from different data sources:
+
+```{r}
+## organize factors 
+estimates_all_sources <- estimates_all_sources %>% 
+  filter(!(scam == "Banking / Credit Card" & source == "FTC Consumer Sentinel")) %>%
+  mutate(source = as.factor(source)) %>% 
+  mutate(source = forcats::fct_relevel(source, "This Study: Direct", "This Study: Generalized Scale-up", "E-CRIME", "Crime UK","DOJ",  "FBI IC3"))
+
+pooled_comparison <- estimates_all_sources %>% 
+  filter(scam != "Non-delivery + Non-Payment") %>%
+  # filter(scam %in% c("Banking / Credit Card", "Banking / Credit Card (and lost money)", "Non-Delivery")) %>% 
+  filter(!is.na(annualized)) %>% 
+  ggplot(mapping = aes(x = reorder(scam, annualized),
+                  y = annualized, color = source, shape = source, group = source)) + 
+  geom_point(mapping = aes(y = annualized), size = 4, stroke = 2, position = position_dodge(width = 0.45)) + 
+  scale_shape_manual(values = c(1, 2, 5, 0, 6, 4, 3)) +
+  geom_hline(yintercept = 0, linetype = "dashed") + 
+  coord_flip() + 
+  theme_bw(base_size = 22) + 
+  labs(x = "",
+       y = "Prevalence (%)",
+       title = "") + 
+  theme(legend.title =element_blank())  +
+  ggsci::scale_color_lancet() +
+  theme(
+    legend.position = c(.999, 0.001),
+    legend.justification = c("right", "bottom"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6),
+    legend.background = element_rect(color = "black", size = .5, linetype = "solid"))
+
+pooled_comparison
+
+ggsave(plot = pooled_comparison, filename = "../figures/fig-cybercrime_pooled_comparison.pdf", width = 12, height = 12)
+```
+
+
+## Figure S1
+
+```{r}
+## read in populations of known size 
+groups_known_size <- read_csv("../data/known_popsize/groups_known_size.csv") %>% 
+  mutate(name = tolower(paste0("name_", name)))
+
+## filter for network size 
+survey_general <- survey %>% 
+  filter(p_over == 1)
+
+## top code
+top_code <- function(x) {
+  x <- case_when(
+    x > 30 ~ 30,
+    TRUE ~ x
+  )
+}
+
+## top code survey
+survey_general <- survey_general %>%
+  mutate(across(c(starts_with("name")), top_code))
+
+
+## estimate of adults in the US over age 18 
+tot.pop.size <- 328239523 * (1-0.223)
+
+## set vector so we can use with our package
+kp.vec <- df.to.kpvec(groups_known_size, kp.var="name", kp.value="size")
+
+## estimate person network size
+degree <- kp.degree.estimator(survey.data=survey_general,
+                              known.popns=kp.vec,
+                              total.popn.size=tot.pop.size,
+                              missing="complete.obs")
+
+## add degree
+survey_general$degree <- degree
+
+## run internal validity checks using the networkreporting package
+iv.result <- nsum.internal.validation(survey.data=survey_general,
+                                      weights = "weight",
+                                      known.popns=kp.vec,
+                                      missing="complete.obs",
+                                      killworth.se=TRUE,
+                                      total.popn.size=tot.pop.size,
+                                      kp.method=TRUE,
+                                      return.plot=TRUE)
+
+iv_results <- iv.result$results %>% 
+  mutate(name = socviz::prefix_strip(name, prefixes = "name_")) %>% 
+  ggplot(aes(x = known.size, y = nsum.holdout.est)) + 
+  theme_cowplot() +
+  scale_y_continuous(label = scales::comma, limits = c(0, 500000)) + 
+  scale_x_continuous(label = scales::comma, limits = c(0, 500000)) + 
+  geom_text(aes(label = name)) + 
+  geom_abline(slope = 1) + 
+  labs(x = "Known Population Size",
+       y = "Hold-out Estimate of Popn Size",
+       title = "")
+
+iv_results_error_bars <- iv.result$results %>% 
+  mutate(name = socviz::prefix_strip(name, prefixes = "name_")) %>% 
+  ggplot(aes(x = known.size, y = nsum.holdout.est)) + 
+  theme_cowplot() + 
+  scale_y_continuous(label = scales::comma, limits = c(0, 500000)) + 
+  scale_x_continuous(label = scales::comma, limits = c(0, 500000)) + 
+  geom_abline(slope = 1) + 
+  geom_errorbar(aes(ymin = nsum.holdout.est - 1.96*killworth.se, 
+                    ymax = nsum.holdout.est + 1.96*killworth.se), width = 12000, size = .5) + 
+  geom_point(shape = 1, size = 2) +
+  labs(x = "Known Population Size",
+       y = "",
+       title = "") 
+
+internal_consitency_check <- cowplot::plot_grid(iv_results, iv_results_error_bars, labels = "auto")
+
+ggsave(plot = internal_consitency_check, filename = "../figures/fig-hold_out_estimate.pdf", width = 12, height = 5)
+```
+
+
