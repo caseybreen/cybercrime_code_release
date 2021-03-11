@@ -208,10 +208,11 @@ common_adjustment_factors <- bind_cols(degree_ratio_genpop, true_positive_genpop
 # bootstrap estimates  -----------------------------------------------------
 
 bootstrap_results <- list()
-for (i in 1:10000){
+for (i in 1:1000){
   
   ## survey_recode
   bootstrap_resample <- survey %>% 
+    filter(p_over == 1) %>% 
     sample_n(nrow(survey), replace = T)
   
   ## manually compute scale-up estimates 
