@@ -8,7 +8,6 @@ Summary: Compute direct estimates of standard errors using the survey_mean funct
 library(tidyverse)
 library(janitor)
 library(srvyr)
-library(googlesheets4)
 ```
 
 ## Full Sample 

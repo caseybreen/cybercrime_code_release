@@ -1,6 +1,8 @@
 ---
-title: "Generate Figures"
+title: "Generate Tables"
 ---
+
+Summary: Generate tables for cybercrime release. 
 
 ```{r initialize}
 ## library packages 
@@ -58,7 +60,6 @@ table1 <- gt(data = table1) %>%
 
 table1 %>%
   gtsave("table_1.tex", path = "../tables/")
-
 ```
 
 ## Table 2
@@ -212,7 +213,7 @@ table_s3 %>%
   gtsave("table_s3.tex", path = "../tables/")
 ```
 
-## Table S3 
+## Table S4
 
 Sample descriptive statistics (weighted). Sample collected from NORC's Amerispeak Panel. 
 
@@ -297,22 +298,10 @@ table_s4 %>%
   gtsave("table_s4.tex", path = "../tables/")
 ```
 
-## Table S3 
+## Table S6
 
 ```{r}
 table_s6 <- adjustments_individual %>% 
-  mutate(`Adjustment Factor` = (1/degree_ratio) * (1/true_positive_rate)) %>% 
-  mutate(scam = case_when(
-    scam == "banking" ~ "Banking / Credit Card",
-    scam == "nondelivery" ~ "Non-Delivery",
-    scam == "banking_lostmoney" ~ "Banking / Credit Card (Lost Money)",
-    scam == "advanced_fee" ~ "Advanced Fee",
-    scam == "nonpayment" ~ "Nonpayment",
-    scam == "extortion" ~ "Extortion",
-    scam == "overpayment" ~ "Overpayment"
-  )) %>% 
-  select(Cybercrime = scam, Prevalence = prevalence, `Degree Ratio` = degree_ratio, 
-         Visibility_ratio = true_positive_rate, `Adjustment Factor`) %>% 
   mutate(across(where(is.numeric), round, 5)) %>% 
   mutate(Cybercrime = forcats::fct_relevel(Cybercrime, "Banking / Credit Card", "Banking / Credit Card (Lost Money)", "Non-Delivery", "Advanced Fee","Non-Payment",  "Extortion", "Overpayment")) %>% 
   arrange(Cybercrime) %>% 
@@ -323,14 +312,25 @@ table_s6 %>%
 ```
 
 
+## Table S7
+
 ```{r}
 table_s7 <- adjustments_pooled %>%
   mutate(`Adjustment Factor` = (1/degree_ratio) * (1/true_positive_rate)) %>% 
-  select(Category = factor, `Degree Ratio` = degree_ratio, `Visibility Factor` = true_positive_rate, `Adjustment Factor`) %>% 
+  select(Category = Incidence, `Degree Ratio` = degree_ratio, `Visibility Factor` = true_positive_rate, `Adjustment Factor`) %>% 
   mutate(across(where(is.numeric), round, 5)) %>% 
   gt()
 
 table_s7 %>%
   gtsave("table_s7.tex", path = "../tables/")
+```
+
+```{r}
+direct_estimates %>% 
+  select(scam, direct_estimate = estimate_annualized) %>% 
+  left_join(loss_estimates %>% 
+  select(scam, median, q10, q90)) %>% 
+  summarize(typical_loss = sum(direct_estimate * median, na.rm = T),
+            worst_case_loss = sum(direct_estimate * q90, na.rm = T))
 ```
 

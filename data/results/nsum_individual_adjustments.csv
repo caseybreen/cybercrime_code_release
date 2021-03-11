@@ -1,8 +1,8 @@
-scam,degree_ratio,true_positive_rate,prevalence
-banking,0.9548982712587992,0.009654785132713626,common
-banking_lostmoney,0.8911572557301695,0,common
-nondelivery,1.2295621630909943,0.005407337635933982,common
-nonpayment,0.858185241530813,0.0207216966262258,rare
-overpayment,1.0863254098899862,0.01966713743442389,rare
-extortion,2.388727712952956,0,rare
-advanced_fee,1.6740346595414335,0.016541986063944237,rare
+Cybercrime,Incidence,Degree Ratio,Visibility_ratio,Adjustment Factor
+Banking / Credit Card,common,0.954898271,0.009654785,108.4676622
+Banking / Credit Card (Lost Money),common,0.891157256,0,Inf
+Non-Delivery,common,1.229562163,0.005407338,150.406298
+Non-Payment,rare,0.858185242,0.020721697,56.23330995
+Overpayment,rare,1.08632541,0.019667137,46.80571774
+Extortion,rare,2.388727713,0,Inf
+Advanced Fee,rare,1.67403466,0.016541986,36.11169751

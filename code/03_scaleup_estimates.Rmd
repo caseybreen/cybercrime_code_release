@@ -28,19 +28,18 @@ set.seed(1)
 ## Direct Network Scale-up Estimates 
 ```{r}
 ## read in survey
-survey <- read_csv("../data/full_survey.csv", guess_max = 15000) %>% 
-  filter(p_over == 1) 
+survey <- read_csv("../data/full_survey.csv", guess_max = 15000) 
 
 ## read in populations of known size 
 known.size <- read_csv("../data/known_popsize/groups_known_size.csv") %>% 
   mutate(name = tolower(paste0("name_", name)))
 
-## top code survey
+## top code number at 30
 survey <- survey %>%
   mutate(across(c(starts_with("name")), top_code))
 
 ## Network Size
-survey <- survey_weighted %>% 
+survey <- survey %>% 
   mutate(network_size = name_emily + name_rachel + name_paula + name_martha + name_tina + name_rose +
            name_adam + name_alan + name_walter + name_bruce + name_kyle + name_ralph)
 
@@ -58,11 +57,11 @@ degree <- kp.degree.estimator(survey.data=survey,
 
 survey$degree <- degree
 
-```
+survey_subsample <- survey %>% 
+  filter(p_over == 1) 
 
-```{r}
 ## manually compute scale-up estimates (c)
-basic_nsum_results <- survey_recode %>% 
+basic_nsum_results <- survey_subsample %>% 
   summarize(banking = sum(scaleup_banking_confirmed*weight)/sum(degree*weight),
             banking_lostmoney = sum(scaleup_banking_desc_lost_money_count_confirmed*weight, na.rm = T)/sum(degree*weight),
             nondelivery = sum(scaleup_nondelivery_confirmed*weight)/sum(degree*weight),
@@ -76,37 +75,20 @@ basic_nsum_results <- survey_recode %>%
 
 ```
 
+
+  scam              proportion
+  <chr>                  <dbl>
+1 banking           0.000677  
+2 banking_lostmoney 0.000139  
+3 nondelivery       0.000102  
+4 nonpayment        0.00000623
+5 overpayment       0.0000118 
+6 advanced_fee      0.00000657
+7 extortion         0.0000219
+
 ## Generalized Scale-up
 
 ```{r}
-# Generalized Scale-up  ----------------------------------------------------------------
-survey <- read_csv("../data/full_survey.csv", guess_max = 15000)
-
-## top code 
-survey <- survey %>%
-  mutate(across(c(starts_with("name")), top_code))
-
-## calculate network size
-survey <- survey %>% 
-  mutate(network_size = name_emily + name_rachel + name_paula + name_martha + name_tina + name_rose +
-           name_adam + name_alan + name_walter + name_bruce + name_kyle + name_ralph)
-
-## estimate of adults in the US over age 18 
-tot.pop.size <- 328239523 * (1-0.223)
-
-## set vector so we can use with our package
-kp.vec <- df.to.kpvec(known.size, kp.var="name", kp.value="size")
-
-## estimate person network size
-degree.oversample <- kp.degree.estimator(survey.data=survey,
-                                         known.popns=kp.vec,
-                                         total.popn.size=tot.pop.size,
-                                         missing="complete.obs")
-
-## create new degree variable
-survey <- survey %>% 
-  mutate(degree = degree.oversample) 
-
 ###############################################
 #### Rare Individual Adjustment Factors #######
 ###############################################
@@ -229,8 +211,8 @@ bootstrap_results <- list()
 for (i in 1:10000){
   
   ## survey_recode
-  bootstrap_resample <- survey_recode %>% 
-    sample_n(nrow(survey_recode), replace = T)
+  bootstrap_resample <- survey %>% 
+    sample_n(nrow(survey), replace = T)
   
   ## manually compute scale-up estimates 
   resample_results <- bootstrap_resample %>% 
@@ -260,7 +242,7 @@ for (i in 1:10000){
               denominator_tp = sum(network_size[nondelivery == 1] * weight[nondelivery == 1], na.rm = T) + sum(network_size[banking == 1] * weight[banking == 1], na.rm = T)) %>% 
     mutate(true_positive = numerator_tp/denominator_tp)
   
-  degree_ratio_genpop <-  survey_oversample %>% 
+  degree_ratio_genpop <-  survey %>% 
   filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9")) %>% 
     summarize(numerator_degree = mean(degree[nondelivery == 1 | banking == 1  ] *
                                         weight[nondelivery == 1 | banking == 1], na.rm = T), 
@@ -274,8 +256,8 @@ for (i in 1:10000){
   ## true positive regular sample
   
   ## adjustment factor 
-  resample_oversample <- survey_oversample %>% 
-    sample_n(size = nrow(survey_oversample), replace = T)
+  resample_oversample <- survey %>% 
+    sample_n(size = nrow(survey), replace = T)
   
   ## weighted True Positive Rate
   true_positive_oversample <- resample_oversample %>% 
@@ -287,7 +269,7 @@ for (i in 1:10000){
     mutate(true_positive = numerator_tp/denominator_tp)
   
   
-  degree_ratio_oversample <-  survey_oversample %>% 
+  degree_ratio_oversample <-  survey %>% 
     summarize(numerator_degree = mean(degree[nonpayment == 1 | overpayment == 1 | extortion == 1 | advanced_fee == 1] *
                                         weight2[nonpayment == 1 | overpayment == 1 | extortion == 1 | advanced_fee == 1], na.rm = T), 
               denominator_degree = mean(degree * weight2, na.rm = T)) %>% 
@@ -351,14 +333,26 @@ gnsum_bootstrap_estimates <- gnsum_bootstrap_estimates %>%
 
 ## scaleup adjustment factors pooled 
 scaleup_adjustment_factors_individual <- common_adjustments %>% 
-  bind_rows(rare_adjustments)
+  bind_rows(rare_adjustments) %>% 
+  mutate(`Adjustment Factor` = (1/degree_ratio) * (1/true_positive_rate)) %>% 
+  mutate(scam = case_when(
+    scam == "banking" ~ "Banking / Credit Card",
+    scam == "nondelivery" ~ "Non-Delivery",
+    scam == "banking_lostmoney" ~ "Banking / Credit Card (Lost Money)",
+    scam == "advanced_fee" ~ "Advanced Fee",
+    scam == "nonpayment" ~ "Non-Payment",
+    scam == "extortion" ~ "Extortion",
+    scam == "overpayment" ~ "Overpayment"
+  )) %>% 
+  select(Cybercrime = scam, Incidence = prevalence, `Degree Ratio` = degree_ratio, 
+         Visibility_ratio = true_positive_rate, `Adjustment Factor`) 
 
 scaleup_adjustment_factors_pooled <- common_adjustment_factors %>% 
   select(degree_ratio, true_positive_rate = true_positive) %>%  
-  mutate(factor = "common") %>% 
+  mutate(Incidence = "common") %>% 
   bind_rows(rare_adjustment_factors %>% 
               select(degree_ratio, true_positive_rate = true_positive) %>% 
-              mutate(factor = "pooled")) %>% 
+              mutate(Incidence = "pooled")) %>% 
   mutate(adjustment_factor = (1/degree_ratio) * (1/true_positive_rate))
 
 ## write our adjustment factors 
