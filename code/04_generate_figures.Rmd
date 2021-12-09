@@ -6,19 +6,20 @@ Summary: This notebook contains code to replicate all figures and tables.
 
 
 ```{r initialize}
-## library packages 
-library(tidyverse)
-library(networkreporting)
-library(socviz)
-library(cowplot)
+## load packages and helper functions 
+library(here)
+source(here("code", "helpers.R"))
+```
 
-
+```{r}
 ## load survey  
 survey <- read_csv("../data/full_survey.csv", guess_max = 15000)
 
 ## load estimates (money lost, direct, generalized network scale-up)
 direct_estimates <- read_csv("../data/results/direct_estimates.csv") 
+direct_estimates_nofilter <- read_csv("../data/results/direct_estimates_nofilter.csv") 
 gnsum_estimates <- read_csv("../data/results/gnsum_estimates.csv") 
+gnsum_estimates_nofilter <- read_csv("../data/results/gnsum_estimates_nofilter.csv") 
 loss_estimates <- read_csv("../data/results/money_lost.csv") 
 
 ## read in data 
@@ -58,17 +59,17 @@ money_plot <- money_lost %>%
   ggplot(aes(x = money, y = ..density..)) +
   stat_density() + 
   theme_bw(base_size = 25) +
-  facet_wrap(~incident, nrow = 3) + 
+  facet_wrap(~incident, nrow = 2) + 
   labs(
     x = "Money Lost",
     Y = "Count"
   ) + 
   scale_x_continuous(breaks=c(0, 500, 1000, 1500),
-                   labels=c("0", "500", "1000", "1500+")) + 
+                   labels=c("$0", "$500", "$1,000", "$1,500+")) + 
   theme(panel.spacing.x=unit(3, "lines"))
 
 ## save plot 
-ggsave(plot = money_plot, "../figures/fig-money_lost.pdf", height = 10, width = 10)
+ggsave(plot = money_plot, "../figures/fig-money_lost.pdf", height = 8, width = 14)
 ```
 
 ## Figure 2 
@@ -81,6 +82,7 @@ results <- bind_rows(direct_estimates, gnsum_estimates)
 
 ## Figure 2 
 combined_comparison_plot <- results %>% 
+  filter(scam != "Banking / Credit Card") %>% 
   ggplot(
     mapping = aes(x = reorder(scam, -estimate_annualized),
                   y = estimate_annualized, color = method, shape = method )) + 
@@ -90,8 +92,8 @@ combined_comparison_plot <- results %>%
   geom_hline(yintercept = 0, linetype = "dashed") + 
   theme_bw(base_size = 22) + 
   labs(x = "",
-       y = "Count") +
-  scale_y_continuous(label = scales::percent) + 
+       y = "Incidence Rate") +
+  scale_y_continuous(label = scales::percent, limits = c(0, 0.07)) + 
   theme(legend.position = "bottom") + 
   theme(legend.title =element_blank()) +
   ggsci::scale_color_lancet() + 
@@ -125,7 +127,7 @@ pooled_comparison <- estimates_all_sources %>%
   ggplot(mapping = aes(x = reorder(scam, annualized),
                   y = annualized, color = source, shape = source, group = source)) + 
   geom_point(mapping = aes(y = annualized), size = 4, stroke = 2, position = position_dodge(width = 0.45)) + 
-  scale_shape_manual(values = c(1, 2, 5, 0, 6, 4, 3)) +
+  scale_shape_manual(values = c(1, 2, 5, 0, 6, 4, 3, 9)) +
   geom_hline(yintercept = 0, linetype = "dashed") + 
   coord_flip() + 
   theme_bw(base_size = 22) + 
@@ -226,5 +228,45 @@ internal_consitency_check <- cowplot::plot_grid(iv_results, iv_results_error_bar
 
 ggsave(plot = internal_consitency_check, filename = "../figures/fig-hold_out_estimate.pdf", width = 12, height = 5)
 ```
+
+## Bonus: Correlation Plot
+
+```{r}
+estimate_comparison <- direct_estimates_nofilter %>% 
+  mutate(method = "Direct, unvalidated") %>% 
+  bind_rows(direct_estimates %>%  mutate(method = "Direct"),
+  gnsum_estimates_nofilter %>% mutate(method = "GNSUM, unvalidated"),
+  gnsum_estimates %>% mutate(method = "GNSUM"))
+
+## Figure 2 
+filter_comparison_plot <- estimate_comparison %>%  
+  filter(!scam %in%  c("Banking / Credit Card")) %>% 
+  ggplot(
+    mapping = aes(x = reorder(scam, -estimate_annualized),
+                  y = estimate_annualized, color = method, shape = method)) + 
+  geom_pointrange(position = position_dodge(width = .3), mapping = aes(ymin = low_annualized,
+                                                                       ymax = upper_annualized),
+                  stroke = 2, size = 1) + 
+  scale_shape_manual(values = c(1, 1, 2, 2)) +
+  geom_hline(yintercept = 0, linetype = "dashed") + 
+  theme_bw(base_size = 22) + 
+  labs(x = "",
+       y = "Incidence Rate") +
+  scale_y_continuous(label = scales::percent, limits = c(0, 0.07)) + 
+  theme(legend.position = "bottom") + 
+  theme(legend.title =element_blank()) +
+  ggsci::scale_color_lancet() + 
+  theme(axis.text.x = element_text(angle = -30, vjust = 0.1, hjust=.09)) + 
+  theme(
+    legend.position = c(.999, .999),
+    legend.justification = c("right", "top"),
+    legend.box.just = "right",
+    legend.margin = margin(6, 6, 6, 6),
+    legend.background = element_rect(color = "black", size = .5, linetype = "solid")) +
+  theme(plot.margin=unit(c(1,2,1,.3),"cm")) 
+
+ggsave(plot = filter_comparison_plot, filename = "../figures/fig-direct_nsum_comparison_filter.pdf", width = 10, height = 9)
+```
+
 
 

@@ -1,0 +1,28 @@
+---
+title: "Run All"
+---
+
+Summary: This notebook contains code to run all scripts. 
+
+```{r}
+## load packages and helper functions 
+library(here)
+source(here("code", "helpers.R"))
+```
+
+
+```{r}
+rmd_files <- list.files(path = "../code/", pattern=".Rmd")
+
+rmd_files <- rmd_files[!rmd_files %in% "00_run_all.Rmd"]
+
+for (cur_file in rmd_files[7:7]) {
+	cat("================================\n")
+	tictoc::tic(glue::glue("Finished with {cur_file}, time:"))
+	cat("Running ", cur_file, "\n")
+  	source_rmd(cur_file)
+  	tictoc::toc()
+	cat("================================\n")
+}
+```
+

@@ -2,7 +2,7 @@
 title: "Network Scale-up Estimates"
 ---
 
-Network Scale-up Estimates 
+Network Scale-up Estimates — No Response Verification 
 
 ```{r}
 ## load packages and helper functions 
@@ -18,10 +18,46 @@ set.seed(1)
 ## read in survey
 survey <- read_csv("../data/full_survey.csv", guess_max = 15000, show_col_types = FALSE) 
 
+recode_nofilter <- function(df) {
+  
+  df <- df %>% 
+    mutate(
+      banking = case_when(
+        ! is.na(banking_flag) ~ 1, 
+        TRUE ~ 0),
+      banking_lostmoney = case_when(
+        banking_money > 0 ~ 1, 
+        TRUE ~ 0),
+        banking = case_when(
+        ! is.na(banking_flag) ~ 1, 
+        TRUE ~ 0),
+      nondelivery = case_when(
+        ! is.na(nondelivery_flag) ~ 1, 
+        TRUE ~ 0),
+      nonpayment = case_when(
+        ! is.na(nonpayment_flag) ~ 1, 
+        TRUE ~ 0),
+      overpayment = case_when(
+        ! is.na(overpayment_flag) ~ 1, 
+        TRUE ~ 0),
+      advanced_fee = case_when(
+        ! is.na(advanced_fee_flag) ~ 1, 
+        TRUE ~ 0),
+      extortion = case_when(
+        ! is.na(extortion_flag) ~ 1, 
+        TRUE ~ 0),
+    )
+  return(df)
+}
+
+survey <- recode_nofilter(survey)
+
 ## read in populations of known size 
 known.size <- read_csv("../data/known_popsize/groups_known_size.csv",  show_col_types = FALSE) %>% 
   mutate(name = tolower(paste0("name_", name)))
+```
 
+```{r}
 ## top code number at 30
 survey <- survey %>%
   mutate(across(c(starts_with("name")), top_code))
@@ -50,13 +86,13 @@ survey_subsample <- survey %>%
 
 ## manually compute scale-up estimates (c)
 basic_nsum_results <- survey_subsample %>% 
-  summarize(banking = sum(scaleup_banking_confirmed*weight)/sum(degree*weight),
-            banking_lostmoney = sum(scaleup_banking_desc_lost_money_count_confirmed*weight, na.rm = T)/sum(degree*weight),
-            nondelivery = sum(scaleup_nondelivery_confirmed*weight)/sum(degree*weight),
-            nonpayment = sum(scaleup_nonpayment_confirmed*weight)/sum(degree*weight),
-            overpayment = sum(scaleup_overpayment_confirmed*weight)/sum(degree*weight),
-            advanced_fee = sum(scaleup_advanced_fee_confirmed*weight)/sum(degree*weight),
-            extortion = sum(scaleup_extortion_confirmed*weight)/sum(degree*weight)) %>% 
+  summarize(banking = sum(scaleup_banking*weight)/sum(degree*weight),
+            banking_lostmoney = sum(scaleup_banking_desc_lost_money_count*weight, na.rm = T)/sum(degree*weight),
+            nondelivery = sum(scaleup_nondelivery*weight)/sum(degree*weight),
+            nonpayment = sum(scaleup_nonpayment*weight)/sum(degree*weight),
+            overpayment = sum(scaleup_overpayment*weight)/sum(degree*weight),
+            advanced_fee = sum(scaleup_advanced_fee*weight)/sum(degree*weight),
+            extortion = sum(scaleup_extortion*weight)/sum(degree*weight)) %>% 
   mutate(id = "id") %>% 
   pivot_longer(-id) %>% 
   select(scam = name, proportion = value)
@@ -93,7 +129,7 @@ degree_ratio_oversample <-  survey %>%
 
 ## Individual True Positive (Visibility Factors)
 true_positive_oversample <- survey %>%  
-  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9")) %>% 
+  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9", "K2Q0W1", "F6Y1X2")) %>% 
   summarize(nonpayment = sum(visibility_nonpayment_count[nonpayment == 1] * weight2, na.rm = T) / sum(network_size[nonpayment == 1] * weight2, na.rm = T),
             advanced_fee = sum(visibility_advanced_fee_count[advanced_fee == 1] * weight2, na.rm = T) / sum(network_size[advanced_fee == 1] * weight2, na.rm = T),
             extortion = sum(visibility_extortion_count[extortion == 1] * weight2, na.rm = T) / sum(network_size[extortion == 1] * weight2, na.rm = T),
@@ -113,7 +149,7 @@ mutate(prevalence = "rare")
 
 ##  True Positive Rate
 true_positive_oversample <- survey %>% 
-  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9")) %>% 
+  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9", "K2Q0W1", "F6Y1X2")) %>% 
   summarize(numerator_tp = sum(visibility_nonpayment_count[nonpayment == 1] * weight2[nonpayment == 1], na.rm = T) + sum(visibility_extortion_count[extortion == 1] * weight2[extortion == 1], na.rm = T) + 
               sum(visibility_advanced_fee_count[advanced_fee == 1] * weight2[advanced_fee == 1], na.rm = T) + sum(visibility_overpayment_count[overpayment == 1]* weight2[overpayment == 1], na.rm = T),
             denominator_tp = sum(network_size[nonpayment == 1] * weight2[nonpayment == 1], na.rm = T) + sum(network_size[advanced_fee == 1] * weight2[advanced_fee == 1], na.rm = T) + 
@@ -146,7 +182,7 @@ survey_general <- survey_general %>%
 ###############################################
 
 degree_ratio_genpop <- survey_general %>% 
-  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9")) %>% 
+  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9", "K2Q0W1", "F6Y1X2")) %>% 
                                        summarize(banking = mean(degree[banking == 1] * weight[banking == 1], na.rm = T) / mean(degree * weight, na.rm = T),
             banking_lostmoney = mean(degree[banking_lostmoney == 1] * weight[banking_lostmoney == 1], na.rm = T) / mean(degree * weight, na.rm = T),
             nondelivery = mean(degree[nondelivery == 1] * weight[nondelivery == 1], na.rm = T) / mean(degree * weight, na.rm = T)) %>% 
@@ -174,13 +210,13 @@ mutate(prevalence = "common")
 ###############################################
 
 true_positive_genpop <- survey_general %>% 
-  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9")) %>% 
+  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9", "K2Q0W1", "F6Y1X2")) %>% 
   summarize(numerator_tp = sum(visibility_nondelivery_count[nondelivery == 1]*weight[nondelivery == 1], na.rm = T) + sum(visibility_banking_count[banking == 1] * weight[banking == 1], na.rm = T),
             denominator_tp = sum(network_size[nondelivery == 1] * weight[nondelivery == 1], na.rm = T) + sum(network_size[banking == 1] * weight[banking == 1], na.rm = T)) %>% 
   mutate(true_positive = numerator_tp/denominator_tp)
 
 degree_ratio_genpop <-  survey_general %>% 
-  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9")) %>% 
+  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9", "K2Q0W1", "F6Y1X2")) %>% 
   summarize(numerator_degree = mean(degree[nondelivery == 1 | banking == 1  ] *
                                       weight[nondelivery == 1 | banking == 1], na.rm = T), 
             denominator_degree = mean(degree * weight, na.rm = T)) %>% 
@@ -206,13 +242,13 @@ for (i in 1:100){
 
   ## manually compute scale-up estimates 
   resample_results <- bootstrap_resample %>% 
-    summarize(banking = sum(scaleup_banking_confirmed*weight)/sum(degree*weight),
-              banking_lostmoney = sum(scaleup_banking_desc_lost_money_count_confirmed*weight, na.rm = T)/sum(degree*weight),
-              nondelivery = sum(scaleup_nondelivery_confirmed*weight)/sum(degree*weight),
-              nonpayment = sum(scaleup_nonpayment_confirmed*weight)/sum(degree*weight),
-              overpayment = sum(scaleup_overpayment_confirmed*weight)/sum(degree*weight),
-              advanced_fee = sum(scaleup_advanced_fee_confirmed*weight)/sum(degree*weight),
-              extortion = sum(scaleup_extortion_confirmed*weight)/sum(degree*weight)) %>% 
+    summarize(banking = sum(scaleup_banking*weight)/sum(degree*weight),
+              banking_lostmoney = sum(scaleup_banking_desc_lost_money_count*weight, na.rm = T)/sum(degree*weight),
+              nondelivery = sum(scaleup_nondelivery*weight)/sum(degree*weight),
+              nonpayment = sum(scaleup_nonpayment*weight)/sum(degree*weight),
+              overpayment = sum(scaleup_overpayment*weight)/sum(degree*weight),
+              advanced_fee = sum(scaleup_advanced_fee*weight)/sum(degree*weight),
+              extortion = sum(scaleup_extortion*weight)/sum(degree*weight)) %>% 
     mutate(id = "id") %>% 
     pivot_longer(-id) %>% 
     select(scam = name, proportion = value)
@@ -227,13 +263,13 @@ for (i in 1:100){
     select(scam = name, degree_ratio = value)
   
   true_positive_genpop <- bootstrap_resample %>% 
-  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9")) %>% 
+  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9", "K2Q0W1", "F6Y1X2")) %>% 
     summarize(numerator_tp = sum(visibility_nondelivery_count[nondelivery == 1]*weight[nondelivery == 1], na.rm = T) + sum(visibility_banking_count[banking == 1] * weight[banking == 1], na.rm = T),
               denominator_tp = sum(network_size[nondelivery == 1] * weight[nondelivery == 1], na.rm = T) + sum(network_size[banking == 1] * weight[banking == 1], na.rm = T)) %>% 
     mutate(true_positive = numerator_tp/denominator_tp)
   
   degree_ratio_genpop <-  survey %>% 
-  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9")) %>% 
+  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9", "K2Q0W1", "F6Y1X2")) %>% 
     summarize(numerator_degree = mean(degree[nondelivery == 1 | banking == 1  ] *
                                         weight[nondelivery == 1 | banking == 1], na.rm = T), 
               denominator_degree = mean(degree * weight, na.rm = T)) %>% 
@@ -251,7 +287,7 @@ for (i in 1:100){
   
   ## weighted True Positive Rate
   true_positive_oversample <- resample_oversample %>% 
-  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9")) %>% 
+  filter(!id %in% c("K9T5J5", "Y3A8A2", "O7M7F9", "K2Q0W1", "F6Y1X2")) %>% 
     summarize(numerator_tp = sum(visibility_nonpayment_count[nonpayment == 1] * weight2[nonpayment == 1], na.rm = T) + sum(visibility_extortion_count[extortion == 1] * weight2[extortion == 1], na.rm = T) + 
                 sum(visibility_advanced_fee_count[advanced_fee == 1] * weight2[advanced_fee == 1], na.rm = T) + sum(visibility_overpayment_count[overpayment == 1]* weight2[overpayment == 1], na.rm = T),
               denominator_tp = sum(network_size[nonpayment == 1] * weight2[nonpayment == 1], na.rm = T) + sum(network_size[advanced_fee == 1] * weight2[advanced_fee == 1], na.rm = T) + 
@@ -345,8 +381,8 @@ scaleup_adjustment_factors_pooled <- common_adjustment_factors %>%
   mutate(adjustment_factor = (1/degree_ratio) * (1/true_positive_rate))
 
 ## write our adjustment factors 
-write_csv(scaleup_adjustment_factors_pooled, "../data/results/nsum_pooled_adjustments.csv")
-write_csv(scaleup_adjustment_factors_individual, "../data/results/nsum_individual_adjustments.csv")
-write_csv(gnsum_bootstrap_estimates, "../data/results/gnsum_estimates.csv")
+write_csv(scaleup_adjustment_factors_pooled, "../data/results/nsum_pooled_adjustments_nofilter.csv")
+write_csv(scaleup_adjustment_factors_individual, "../data/results/nsum_individual_adjustments_nofilter.csv")
+write_csv(gnsum_bootstrap_estimates, "../data/results/gnsum_estimates_nofilter.csv")
 ```
 

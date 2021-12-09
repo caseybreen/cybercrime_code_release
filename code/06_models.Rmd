@@ -1,0 +1,246 @@
+---
+title: "Demographic Models"
+---
+
+Summary: Exploratory code to fit (logistic) models. Specifically, the models look at the association between demographic characteristics and whether someone was the victim of a cybercrime.
+
+Notes: 
+
+- I survey weights for all models (`weight` for genpop, `weight2` for oversample)
+- Codebook with variable descriptions and value labels available under: "data/amerispeak/codebook.csv"
+- Banking, nondelivery, nonpayment, overpayment, extortion, and advanced fee variables all 1/0 dummy variables indicating whether someone reported being a victim of a scam (and we agreed with our coding).
+
+
+```{r}
+## load packages and helper functions 
+library(here)
+source(here("code", "helpers.R"))
+```
+ 
+```{r}
+## read in general survey
+survey_full <- read_csv("../data/full_survey.csv", guess_max = 15000) %>% filter(p_over == 1)
+survey_oversample <- read_csv("../data/full_survey.csv", guess_max = 15000)
+
+prep_data <- function(df){
+  df <- df %>%  
+    mutate(age4 = case_when(
+      age4 == 1 ~	"18-29",
+      age4 == 2	~ "30-44",
+      age4 == 3	~ "45-59",
+      age4 == 4	~ "60+"),
+      educ = case_when(
+        educ == 1:2 ~	"High school Or Less",
+        educ == 3 ~	"Some College",
+        educ == 4:5 ~	"Bachelors or Higher"
+      ),
+      gender = case_when(
+        gender == 1 ~"Male",
+        gender == 2 ~ "Female"
+      ),
+      racethnicity = case_when(
+        racethnicity == 1 ~ "White, non-Hispanic",
+        racethnicity == 2 ~	"Black, non-Hispanic",
+        racethnicity == 4 ~	"Hispanic",
+        racethnicity %in% c(3, 5, 6) ~	"Race, Other")
+    ) %>%
+    mutate(payment_victim = case_when(
+      banking == 1 | nondelivery == 1 ~ 1, #| nonpayment == 1 | overpayment == 1 | extortion == 1 | advanced_fee == 1 ~ 1,
+      TRUE ~ 0),
+      seller_victim = case_when(
+        nonpayment == 1 | overpayment == 1 ~ 1,
+        TRUE ~ 0),
+      scam_victim = case_when(
+        extortion == 1 | advanced_fee == 1 ~ 1,
+        TRUE ~ 0),
+      internet_skills = case_when(
+        (skill_advanced_search + skill_pdf + skill_spyware + skill_wiki + skill_cache + skill_phishing)/5 > 3 ~ "High Internet Skills",
+        TRUE ~ "Low Internet Skills"),
+      internet_skills_continuous = (skill_advanced_search + skill_pdf + skill_spyware + skill_wiki + skill_cache + skill_phishing)/5, 
+      income3 = case_when(
+        income %in% 1:9 ~ "Less than 50k", ## <50k
+        income %in% 10:13 ~ "50 - 100k", ## 50 - 100k
+        income %in% 14:18 ~ "100k+" ## 100k+
+      )) %>% 
+    mutate(gender = fct_relevel(as_factor(gender), "Male"),
+           racethnicity = fct_relevel(as_factor(racethnicity), "White, non-Hispanic"),
+           educ = fct_relevel(as_factor(educ), "High school Or Less"),
+           age4 = fct_relevel(as_factor(age4), "18-29"),
+           income3 = fct_relevel(as_factor(income3), "Less than 50k"),
+           internet_skills = fct_relevel(as_factor(internet_skills), "Low Internet Skills"))
+  
+  return(df)
+}
+
+## prep data 
+survey_full <- prep_data(survey_full)
+survey_oversample <- prep_data(survey_oversample)
+
+```
+
+## Nondelivery + Banking
+
+```{r}
+## Set Colors for all models 
+
+values = ggsci::pal_lancet()(6)
+
+categories <- fullsample_results %>% filter(term != "(Intercept)") %>% 
+  pull(category)
+
+consistent_colors <- setNames(values, levels(as.factor(categories)) )
+
+
+## pooled model
+nondelivery_scam_model <- glm(payment_victim ~ racethnicity + gender + age4 + educ + income3 + internet_skills, family = "binomial", data = survey_full, weight = weight)
+
+## pooled model
+nondelivery_scam_model_results <-tidy(nondelivery_scam_model) %>%  
+  mutate(odds_ratio = exp(estimate),
+         p.value = round(p.value, 3)) %>% 
+  mutate(category = case_when(
+    str_detect(term, "racethnicity") ~ "Race/Ethnicity",
+    str_detect(term, "income3") ~ "Income",
+    str_detect(term, "educ") ~ "Education",
+    str_detect(term, "age4") ~ "Age",
+    str_detect(term, "gender") ~ "Gender",
+    TRUE ~ "Internet Skills"
+  )) %>% 
+  mutate(term = prefix_strip(term, "racethnicity"),
+         term = prefix_strip(term, "Income3"),
+         term = prefix_strip(term, "educ"),
+         term = prefix_strip(term, "Age4"),
+         term = prefix_strip(term, "gender"),
+         term = prefix_strip(term, "internet_skills"))
+
+
+
+common_incidence_model_plot <- nondelivery_scam_model_results %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(lower = exp(estimate-1.96*std.error),
+         upper = exp(estimate + 1.96*std.error)) %>% 
+  ggplot(aes(x = odds_ratio,
+             y = reorder(term, odds_ratio),
+             xmin = lower,
+             xmax = upper,
+             color = category)) + 
+  geom_pointrange() + 
+  cowplot::theme_cowplot() + 
+  geom_vline(xintercept = 1, linetype = "dashed")+ 
+  scale_x_log10() + 
+  labs(x = "Odds Ratio",
+       y = "",
+       title = "Banking + Non-Delivery") + 
+  scale_color_manual(values = consistent_colors) + 
+  theme(legend.position = "none")
+
+common_incidence_model_plot
+```
+
+## Overpayment + Non-Payment
+
+```{r}
+## pooled model
+payment_scam_model <- glm(seller_victim ~ racethnicity + gender  + age4 + income3 + educ , family = "binomial", data = survey_oversample, weight = weight2)
+
+
+## pooled model
+payment_scam_model_results <- tidy(payment_scam_model) %>%  
+  mutate(odds_ratio = exp(estimate),
+         p.value = round(p.value, 3)) %>% 
+  mutate(category = case_when(
+    str_detect(term, "racethnicity") ~ "Race/Ethnicity",
+    str_detect(term, "income3") ~ "Income",
+    str_detect(term, "educ") ~ "Education",
+    str_detect(term, "age4") ~ "Age",
+    str_detect(term, "gender") ~ "Gender",
+    TRUE ~ "Internet Skills"
+  )) %>% 
+  mutate(term = prefix_strip(term, "racethnicity"),
+         term = prefix_strip(term, "Income3"),
+         term = prefix_strip(term, "educ"),
+         term = prefix_strip(term, "Age4"),
+         term = prefix_strip(term, "gender"))
+
+rare_incidence_model_plot_sell <- payment_scam_model_results %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(lower = exp(estimate-1.96*std.error),
+         upper = exp(estimate + 1.96*std.error)) %>% 
+  ggplot(aes(x = odds_ratio,
+             y = reorder(term, odds_ratio),
+             xmin = lower,
+             xmax = upper,
+             color = category)) + 
+  geom_pointrange() + 
+  cowplot::theme_cowplot() + 
+  geom_vline(xintercept = 1, linetype = "dashed")+ 
+  scale_x_log10() + 
+  labs(x = "Odds Ratio",
+       y = "",
+       title = "Nonpayment + Overpayment") + 
+  scale_color_manual(values = consistent_colors) + 
+  theme(legend.position = "null")
+
+rare_incidence_model_plot_sell
+```
+
+
+```{r}
+## pooled model
+payment_extortion_model <- glm(scam_victim ~ racethnicity + gender + age4 + income3 + educ, family = "binomial", data = survey_oversample, weight = weight2)
+
+## pooled model
+payment_extortion_model_results <- tidy(payment_extortion_model) %>%  
+  mutate(odds_ratio = exp(estimate),
+         p.value = round(p.value, 3)) %>% 
+  mutate(category = case_when(
+    str_detect(term, "racethnicity") ~ "Race/Ethnicity",
+    str_detect(term, "income3") ~ "Income",
+    str_detect(term, "educ") ~ "Education",
+    str_detect(term, "age4") ~ "Age",
+    str_detect(term, "gender") ~ "Gender",
+    TRUE ~ "Internet Skills"
+  )) %>% 
+  mutate(term = prefix_strip(term, "racethnicity"),
+         term = prefix_strip(term, "Income3"),
+         term = prefix_strip(term, "educ"),
+         term = prefix_strip(term, "Age4"),
+         term = prefix_strip(term, "gender"))
+
+rare_incidence_model_extortion <- payment_extortion_model_results %>% 
+  filter(term != "(Intercept)") %>% 
+  mutate(lower = exp(estimate-1.96*std.error),
+         upper = exp(estimate + 1.96*std.error)) %>% 
+  ggplot(aes(x = odds_ratio,
+             y = reorder(term, odds_ratio),
+             xmin = lower,
+             xmax = upper,
+             color = category)) + 
+  geom_pointrange() + 
+  cowplot::theme_cowplot() + 
+  geom_vline(xintercept = 1, linetype = "dashed")+ 
+  scale_x_log10() + 
+  labs(x = "Odds Ratio",
+       y = "",
+       title = "Advanced Fee + Extortion") + 
+  scale_color_manual(values = consistent_colors) + 
+  theme(legend.position = "bottom", legend.title = element_blank())
+
+rare_incidence_model_extortion
+```
+
+```{r}
+legend <- cowplot::get_legend(
+  # create some space to the left of the legend
+  rare_incidence_model_plot)
+
+pgrid <- cowplot::plot_grid(common_incidence_model_plot, rare_incidence_model_plot_sell, rare_incidence_model_extortion +
+  theme(legend.position = "none"), ncol = 1, labels = "auto")
+
+p <- cowplot::plot_grid(pgrid, legend, nrow = 2, rel_heights = c(1, .1))
+
+ggsave(plot = p, filename = "../figures/fig-demographic-models.pdf", height = 14, width = 8)
+```
+
+
+

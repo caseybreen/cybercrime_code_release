@@ -5,12 +5,13 @@ title: "Generate Tables"
 Summary: Generate tables for cybercrime release. 
 
 ```{r initialize}
-## library packages 
-library(tidyverse)
-library(networkreporting)
-library(janitor)
-library(gt)
+## load packages and helper functions 
+library(here)
+source(here("code", "helpers.R"))
+```
 
+
+```{r}
 ## load survey  
 survey <- read_csv("../data/full_survey.csv", guess_max = 15000)
 
@@ -92,7 +93,7 @@ table2 %>%
 
 ## Table S3 
 
-Sample descriptive statistics (weighted). Sample collected from NORC's Amerispeak Panel. 
+Sample descriptive statistics (unweighted). Sample collected from NORC's Amerispeak Panel. 
 
 
 ```{r}

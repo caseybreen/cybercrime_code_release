@@ -2,23 +2,21 @@
 title: "Direct Estimates Money Lost"
 ---
 
-Summary: Direct estimates of money lost due to cybercrime 
-
-Library Packages 
+Summary: Direct estimates of money lost due to cybercrime. 
 
 ```{r}
-library(tidyverse)
-library(survey)
-library(srvyr)
+## load packages and helper functions 
+library(here)
+source(here("code", "helpers.R"))
 ```
 
 ## Money 
 
 ```{r}
-survey <- read_csv("../data/full_survey.csv", guess_max = 15000)
+full_survey <- read_csv("../data/full_survey.csv", guess_max = 15000, show_col_types = FALSE)
 
 ## recode money 
-survey <- survey %>% 
+survey <- full_survey %>% 
   mutate(banking_money = case_when(
     banking_lostmoney == 1 ~ banking_money,
     TRUE ~ NA_real_), 
@@ -103,4 +101,15 @@ money_lost <- mean_money_lost %>%
 ## save results 
 write_csv(money_lost, file = "../data/results/money_lost.csv")
 ```
+
+```{r}
+## median loss across all scams 
+survey %>% 
+  select(ends_with("_money") & !starts_with("scaleup_"), weight2) %>% 
+  mutate(id = 1) %>% 
+  pivot_longer(-c(id, weight2)) %>% 
+  as_survey_design(weight = weight2) %>% 
+  summarize(median_loss = survey_quantile(value, c(0.1, .25, .5, .75, .9), na.rm = T))
+```
+
 

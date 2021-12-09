@@ -16,7 +16,42 @@ gensample <- read_csv("../data/full_survey.csv", guess_max = 15000, show_col_typ
   filter(p_over == 1)
 
 ## oversample
-oversample <- read_csv("../data/full_survey.csv", guess_max = 15000, show_col_types = FALSE) 
+oversample <- read_csv("../data/full_survey.csv", guess_max = 15000, show_col_types = FALSE)
+
+recode_nofilter <- function(df) {
+  
+  df <- df %>% 
+    mutate(
+      banking = case_when(
+        ! is.na(banking_flag) ~ 1, 
+        TRUE ~ 0),
+      banking_lostmoney = case_when(
+        banking_money > 0 ~ 1, 
+        TRUE ~ 0),
+        banking = case_when(
+        ! is.na(banking_flag) ~ 1, 
+        TRUE ~ 0),
+      nondelivery = case_when(
+        ! is.na(nondelivery_flag) ~ 1, 
+        TRUE ~ 0),
+      nonpayment = case_when(
+        ! is.na(nonpayment_flag) ~ 1, 
+        TRUE ~ 0),
+      overpayment = case_when(
+        ! is.na(overpayment_flag) ~ 1, 
+        TRUE ~ 0),
+      advanced_fee = case_when(
+        ! is.na(advanced_fee_flag) ~ 1, 
+        TRUE ~ 0),
+      extortion = case_when(
+        ! is.na(extortion_flag) ~ 1, 
+        TRUE ~ 0),
+    )
+  return(df)
+}
+
+gensample <- recode_nofilter(df = gensample)
+oversample <- recode_nofilter(df = oversample)
 ```
 
 
@@ -55,7 +90,6 @@ direct_estimates <- dsurvey %>%
     scam == "extortion" ~ "Extortion",
     scam == "overpayment" ~ "Overpayment"
   ))
-
 
 ## create survey object 
 oversample_survey <- oversample %>% 
@@ -100,10 +134,8 @@ direct_estimates <- oversample_summary_stats %>%
          method = "Direct")
 ```
 
-
-
 ```{r}
-write_csv(direct_estimates, file = "../data/results/direct_estimates.csv")
+write_csv(direct_estimates, file = "../data/results/direct_estimates_nofilter.csv")
 ```
 
 
